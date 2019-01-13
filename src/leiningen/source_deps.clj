@@ -10,7 +10,8 @@
             [leiningen.core.main :refer [info debug]]
             [clojure.edn :as edn])
   (:import [java.util.zip ZipFile ZipEntry ZipOutputStream]
-           [java.util UUID]))
+           [java.util UUID]
+           (org.apache.commons.lang3 RegExUtils StringUtils)))
 
 (defn- zip-target-file
   [target-dir entry-path]
@@ -78,16 +79,23 @@
       (spit file new))))
 
 (defn- update-file [file prefixes prefix]
-  (let [old (slurp file)
-        new (-> (str/replace old (re-pattern (str "(\\[\\s*)" prefix "(\\s+\\[?)")) (str "$1" (prefixes prefix) "$2"))
-                (str/replace (re-pattern (str "(\\s+\\(?)" prefix "([\\s\\.])")) (str "$1" (prefixes prefix) "$2")))]
+  (let [new-prefix (get prefixes prefix)
+        _ (assert new-prefix)
+        old (slurp file)
+        new (-> old
+                (RegExUtils/replaceAll (re-pattern (str "(\\[\\s*)" prefix "(\\s+\\[?)"))
+                                       (str "$1" new-prefix "$2"))
+                (RegExUtils/replaceAll (re-pattern (str "(\\s+\\(?)" prefix "([\\s\\.])"))
+                                       (str "$1" new-prefix "$2")))]
     (when-not (= old new)
       (spit file new))))
 
 (defn- update-deftypes [file old-ns new-deftype]
-  (let [old (slurp file)
+  (let [^String old (slurp file)
         old-deftype-prefix (-> old-ns name (str/replace "-" "_"))
-        new (str/replace old (re-pattern (str "([\\s\\^]+)" old-deftype-prefix)) (str "$1" (name new-deftype)))]
+        pattern (re-pattern (str "([\\s\\^]+)" old-deftype-prefix))
+        replacement (str "$1" (name new-deftype))
+        new (RegExUtils/replaceAll old pattern replacement)]
     (when-not (= old new)
       (spit file new))))
 
@@ -183,6 +191,13 @@
 
 (defn- prefix-dependency-imports! [pname pversion pprefix prefix src-path srcdeps]
   (let [cleaned-name-version (clean-name-version pname pversion)
+        replace-idents (fn [text idents]
+                         (reduce (fn [^String text ident]
+                                   (let [pattern (re-pattern (str "([^\\.])" ident))
+                                         replacement (str "$1" cleaned-name-version "." ident)]
+                                     (RegExUtils/replaceAll text pattern replacement)))
+                                 text
+                                 idents))
         prefix (some-> (first prefix)
                        (str/replace "-" "_")
                        (str/replace "." "/"))
@@ -196,17 +211,19 @@
         package-names (->> class-names
                            (map class-name->package-name)
                            set)]
-    (info (format "    prefixing imports in clojure files in '%s' ..." (first clj-dep-path)))
+    (info (format "    prefixing imports in %s clojure files in '%s' ..." (count clj-files) (first clj-dep-path)))
     (debug "class-names" class-names)
     (debug "package-names" package-names)
     (doseq [file clj-files]
-      (let [old (slurp (fs/file file))
-            orig-import (find-orig-import imports file)
-            new-import (reduce #(str/replace %1 (re-pattern (str "([^\\.])" %2)) (str "$1" cleaned-name-version "." %2)) orig-import package-names)
+      (let [orig-import (find-orig-import imports file)
+            new-import (replace-idents orig-import package-names)
+            old (slurp (fs/file file))
             uuid (str (UUID/randomUUID))
-            new (str/replace old orig-import uuid)
-            new (reduce #(str/replace %1 (re-pattern (str "([^\\.])" %2)) (str "$1" cleaned-name-version "." %2)) new class-names)
-            new (str/replace new uuid new-import)]
+            new (-> old
+                    (StringUtils/replace orig-import uuid)
+                    (replace-idents class-names)
+                    (StringUtils/replace uuid new-import))]
+
         (when-not (= old new)
           (debug "file: " file " orig import:" orig-import " new import:" new-import)
           (spit file new))))))
