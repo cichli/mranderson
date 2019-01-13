@@ -9,7 +9,8 @@
             [clojure.pprint :as pp]
             [leiningen.core.main :refer [info debug]]
             [clojure.edn :as edn])
-  (:import [java.util.zip ZipFile ZipEntry ZipOutputStream]
+  (:import (clojure.lang PersistentQueue)
+           [java.util.zip ZipFile ZipEntry ZipOutputStream]
            [java.util UUID]
            (org.apache.commons.lang3 RegExUtils StringUtils)))
 
@@ -242,7 +243,9 @@
 (defn lookup-opt [opt-key opts]
   (second (drop-while #(not= % opt-key) opts)))
 
-(defn- unzip&update-artifact! [pname pversion pprefix uuid skip-repackage-java-classes srcdeps src-path dep-hierarchy prefix-exclusions dep]
+(defn- unzip&update-artifact!
+  [{:keys [dep dep-hierarchy src-path]}
+   {:keys [pname pversion pprefix uuid skip-repackage-java-classes srcdeps prefix-exclusions]}]
   (let [art-name (-> dep first name (str/split #"/") last)
         art-name-cleaned (str/replace art-name #"[\.-_]" "")
         art-version (str "v" (-> dep second (str/replace "." "v")))
@@ -291,15 +294,23 @@
     (doseq [file (clojure-source-files [srcdeps])]
       (doall (map (partial update-file file prefixes) (keys prefixes)))
       (degarble-imports! fixed-imports file uuid))
-    ;; recur on transitive deps, omit clojure itself
-    (when-let [trans-deps (dep-hierarchy dep)]
-      (debug (format "resolving transitive dependencies for %s:" art-name))
-      (debug trans-deps)
-      (->> trans-deps
-           keys
-           (remove #(= (first %) (symbol "org.clojure/clojure")))
-           (map (partial unzip&update-artifact! pname pversion pprefix uuid skip-repackage-java-classes srcdeps (fs/file src-path (str/join "/" [art-name-cleaned art-version])) trans-deps prefix-exclusions))
-           doall))))
+    {:art-name-cleaned art-name-cleaned :art-version art-version}))
+
+(defn- unzip&update-artifacts!
+  [deps ctx]
+  (loop [pending-deps (into (PersistentQueue/EMPTY) deps)]
+    (when-let [{:keys [dep dep-hierarchy src-path] :as pending-dep} (peek pending-deps)]
+      (let [{:keys [art-name-cleaned art-version]} (unzip&update-artifact! pending-dep ctx)
+            hierarchy (dep-hierarchy dep)]
+        ;; recur on transitive deps
+        (recur (->> (keys hierarchy)
+                    (into (pop pending-deps)
+                          (keep (fn [dep]
+                                  ;; omit Clojure itself
+                                  (when-not (= (first dep) 'org.clojure/clojure)
+                                    {:dep dep
+                                     :dep-hierarchy hierarchy
+                                     :src-path (fs/file src-path (str/join "/" [art-name-cleaned art-version]))}))))))))))
 
 (defn source-deps
   "Dependencies as source: used as if part of the project itself.
@@ -326,7 +337,18 @@
     (debug "skip repackage" skip-repackage-java-classes)
     (info "project prefix: " pprefix)
     (info "retrieve dependencies and munge clojure source files")
-    (doall (map (partial unzip&update-artifact! name version pprefix uuid skip-repackage-java-classes srcdeps-relative srcdeps dep-hierarchy prefix-exclusions) (keys ordered-hierarchy)))
+    (unzip&update-artifacts! (->> (keys ordered-hierarchy)
+                                  (into [] (map (fn [dep]
+                                                  {:dep dep
+                                                   :dep-hierarchy dep-hierarchy
+                                                   :src-path srcdeps}))))
+                             {:pname name
+                              :pversion version
+                              :pprefix pprefix
+                              :uuid uuid
+                              :skip-repackage-java-classes skip-repackage-java-classes
+                              :srcdeps srcdeps-relative
+                              :prefix-exclusions prefix-exclusions})
     (when-not (or skip-repackage-java-classes (empty? (class-files)))
       (class-deps-jar!)
       (apply-jarjar! name version)
