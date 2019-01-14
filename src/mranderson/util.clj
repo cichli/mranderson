@@ -11,22 +11,21 @@
 
 (defn clojure-source-files-relative
   ([dirs excl-dir]
-     (let [excl-dirs (when excl-dir (map #(str % "/" excl-dir) dirs))]
-       (->> dirs
-            (map io/file)
-            (filter #(.exists ^File %))
-            (mapcat file-seq)
-            (remove (fn [file]
-                      (some #(.startsWith (str file) %) excl-dirs) ))
-            (filter (fn [^File file]
-                      (let [file-name (.getName file)]
-                        (and (.isFile file)
-                             (or
-                              (.endsWith file-name ".cljc")
-                              (.endsWith file-name ".cljs")
-                              (.endsWith file-name ".clj")))))))))
-  ([dirs]
-     (clojure-source-files-relative dirs nil)))
+   (let [excl-dirs (when excl-dir (map #(str % "/" excl-dir) dirs))]
+     (->> dirs
+          (map io/file)
+          (filter #(.exists ^File %))
+          (mapcat file-seq)
+          (remove (fn [file]
+                    (some #(.startsWith (str file) %) excl-dirs) ))
+          (filter (fn [^File file]
+                    (let [file-name (.getName file)]
+                      (and (.isFile file)
+                           (or
+                            (.endsWith file-name ".cljc")
+                            (.endsWith file-name ".cljs")
+                            (.endsWith file-name ".clj")))))))))
+  ([dirs] (clojure-source-files-relative dirs nil)))
 
 (defn relevant-clj-dep-path [^String src-path prefix pprefix]
   (if (.endsWith src-path "target/srcdeps")

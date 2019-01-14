@@ -19,7 +19,7 @@
   This is patched version of Stuart Siearra's original to handle cljc files
 
 "}
-  mranderson.move
+    mranderson.move
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
             [com.climate.claypoole :as cp]

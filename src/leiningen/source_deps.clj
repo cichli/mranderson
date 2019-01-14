@@ -290,12 +290,12 @@
         (when-not (= "project.clj" clj-file)
           (let [old-path (str "target/srcdeps/" clj-file)
                 new-path (str pprefix "/" art-name-cleaned "/" art-version "/" clj-file)]
-              (fs/copy+ old-path (str "target/srcdeps/" new-path))
-              ;; replace occurrences of file path references
-              (doseq [file (clojure-source-files [srcdeps])]
-                (update-path-in-file file clj-file new-path))
-              ;; remove old file
-              (fs/delete old-path)))))
+            (fs/copy+ old-path (str "target/srcdeps/" new-path))
+            ;; replace occurrences of file path references
+            (doseq [file (clojure-source-files [srcdeps])]
+              (update-path-in-file file clj-file new-path))
+            ;; remove old file
+            (fs/delete old-path)))))
     ;; fixing prefixes, degarble imports
     (cp/pdoseq (+ 2 (cp/ncpus)) [file (clojure-source-files [srcdeps])]
       (update-file file prefixes)
