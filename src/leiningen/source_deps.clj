@@ -79,15 +79,17 @@
     (when-not (= old new)
       (spit file new))))
 
-(defn- update-file [file prefixes prefix]
-  (let [new-prefix (get prefixes prefix)
-        _ (assert new-prefix)
-        old (slurp file)
-        new (-> old
-                (RegExUtils/replaceAll (re-pattern (str "(\\[\\s*)" prefix "(\\s+\\[?)"))
-                                       (str "$1" new-prefix "$2"))
-                (RegExUtils/replaceAll (re-pattern (str "(\\s+\\(?)" prefix "([\\s\\.])"))
-                                       (str "$1" new-prefix "$2")))]
+(defn- update-file [file prefixes]
+  (let [old (slurp file)
+        new (reduce (fn [^String source [prefix new-prefix]]
+                      (let [pattern1 (re-pattern (str "(\\[\\s*)" prefix "(\\s+\\[?)"))
+                            pattern2 (re-pattern (str "(\\s+\\(?)" prefix "([\\s\\.])"))
+                            replacement (str "$1" new-prefix "$2")]
+                        (-> source
+                            (RegExUtils/replaceAll pattern1 replacement)
+                            (RegExUtils/replaceAll pattern2 replacement))))
+                    old
+                    prefixes)]
     (when-not (= old new)
       (spit file new))))
 
@@ -292,7 +294,7 @@
               (fs/delete old-path)))))
     ;; fixing prefixes, degarble imports
     (doseq [file (clojure-source-files [srcdeps])]
-      (doall (map (partial update-file file prefixes) (keys prefixes)))
+      (update-file file prefixes)
       (degarble-imports! fixed-imports file uuid))
     {:art-name-cleaned art-name-cleaned :art-version art-version}))
 
