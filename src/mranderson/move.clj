@@ -22,6 +22,7 @@
   mranderson.move
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
+            [com.climate.claypoole :as cp]
             [mranderson.util :as util])
   (:import (java.io File FileNotFoundException)))
 
@@ -116,5 +117,5 @@
   sure you have a backup or version control."
   [old-sym new-sym source-path extension dirs]
   (move-ns-file old-sym new-sym extension source-path)
-  (doseq [file (clojure-source-files dirs extension)]
+  (cp/pdoseq (+ 2 (cp/ncpus)) [file (clojure-source-files dirs extension)]
     (update-file file replace-ns-symbol old-sym new-sym)))

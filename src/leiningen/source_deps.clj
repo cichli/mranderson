@@ -7,6 +7,7 @@
             [clojure.java.io :as io]
             [clojure.tools.namespace.file :refer [read-file-ns-decl]]
             [clojure.pprint :as pp]
+            [com.climate.claypoole :as cp]
             [leiningen.core.main :refer [info debug]]
             [clojure.edn :as edn])
   (:import (clojure.lang PersistentQueue)
@@ -278,7 +279,7 @@
             (garble-import! srcdeps clj-file import uuid))
           ;; fixing generated classes/deftypes
           (when (.contains (name old-ns) "-")
-            (doseq [file (clojure-source-files [srcdeps])]
+            (cp/pdoseq (+ 2 (cp/ncpus)) [file (clojure-source-files [srcdeps])]
               (update-deftypes file old-ns new-deftype)))
           ;; move actual ns-s
           (move/move-ns old-ns new-ns srcdeps (file->extension (str clj-file)) [srcdeps]))
@@ -293,7 +294,7 @@
               ;; remove old file
               (fs/delete old-path)))))
     ;; fixing prefixes, degarble imports
-    (doseq [file (clojure-source-files [srcdeps])]
+    (cp/pdoseq (+ 2 (cp/ncpus)) [file (clojure-source-files [srcdeps])]
       (update-file file prefixes)
       (degarble-imports! fixed-imports file uuid))
     {:art-name-cleaned art-name-cleaned :art-version art-version}))
