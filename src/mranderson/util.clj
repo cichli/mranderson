@@ -28,7 +28,7 @@
   ([dirs]
      (clojure-source-files-relative dirs nil)))
 
-(defn relevant-clj-dep-path [src-path prefix pprefix]
+(defn relevant-clj-dep-path [^String src-path prefix pprefix]
   (if (.endsWith src-path "target/srcdeps")
     [(str "target/srcdeps/" prefix)]
     (vector (str "target/srcdeps/"
@@ -43,14 +43,13 @@
        (map #(.getCanonicalFile ^File %))))
 
 (defn class-files []
-  (->> "target/srcdeps"
-       io/file
-       (#(.listFiles %))
-       (filter #(.isDirectory %))
-       (mapcat file-seq)
-       (filter (fn [^File file]
-                 (and (.isFile file)
-                      (.endsWith (.getName file) ".class"))))))
+  (->> (.listFiles (io/file "target/srcdeps"))
+       (sequence (comp (filter (fn [^File file]
+                                 (.isDirectory file)))
+                       (mapcat file-seq)
+                       (filter (fn [^File file]
+                                 (and (.isFile file)
+                                      (.endsWith (.getName file) ".class"))))))))
 
 (defn class-file->fully-qualified-name [file]
   (->> (-> file
@@ -101,7 +100,7 @@
     (info (format "prefixing %s in target/class-deps.jar with %s" java-dirs name-version))
     (StandaloneJarProcessor/run jar-file jar-file processor)))
 
-(defn remove-2parents [file]
+(defn remove-2parents ^String [file]
   (->> (str/split (str file) #"/")
        (drop 2)
        (str/join "/")))

@@ -27,16 +27,19 @@
   ([source target-dir]
    (let [zip (ZipFile. (fs/file source))
          entries (enumeration-seq (.entries zip))]
-     (doseq [entry entries :when (not (.isDirectory ^java.util.zip.ZipEntry entry))
+     (doseq [^ZipEntry entry entries
+             :when (not (.isDirectory entry))
              :let [f (zip-target-file target-dir entry)]]
        (fs/mkdirs (fs/parent f))
        (io/copy (.getInputStream zip entry) f))
      (->> entries
-          (filter #(not (.isDirectory ^java.util.zip.ZipEntry %)))
-          (map #(.getName %))
-          (filter #(or (.endsWith % ".clj")
-                       (.endsWith % ".cljc")
-                       (.endsWith % ".cljs")))))))
+          (into [] (comp (keep (fn [^ZipEntry entry]
+                                 (when-not (.isDirectory entry)
+                                   (.getName entry))))
+                         (filter (fn [^String entry]
+                                   (or (.endsWith entry ".clj")
+                                       (.endsWith entry ".cljc")
+                                       (.endsWith entry ".cljs"))))))))))
 
 (defn- cljfile->prefix [clj-file]
   (->> (str/split clj-file #"/")
@@ -103,7 +106,7 @@
     (when-not (= old new)
       (spit file new))))
 
-(defn- import-fragment-left [clj-source]
+(defn- import-fragment-left [^String clj-source]
   (let [index-of-import (.indexOf clj-source ":import")]
     (when (> index-of-import -1)
       (drop (loop [ns-decl-fragment (reverse (take index-of-import clj-source))
@@ -252,7 +255,7 @@
   (let [art-name (-> dep first name (str/split #"/") last)
         art-name-cleaned (str/replace art-name #"[\.-_]" "")
         art-version (str "v" (-> dep second (str/replace "." "v")))
-        clj-files (doall (unzip (-> dep meta :file) srcdeps))
+        clj-files (unzip (-> dep meta :file) srcdeps)
         repl-prefix (replacement-prefix pprefix "srcdeps" src-path art-name-cleaned art-version nil)
         prefixes (apply dissoc (reduce #(assoc %1 %2 (str (replacement repl-prefix %2 nil))) {} (possible-prefixes clj-files)) prefix-exclusions)
         imports (->> clj-files

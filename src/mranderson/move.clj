@@ -42,7 +42,7 @@
       (str/replace "-" "_")
       (str/replace "." File/separator)))
 
-(defn- sym->file
+(defn- sym->file ^File
   [path sym extension]
   (io/file path (str (sym->file-name sym) extension)))
 
